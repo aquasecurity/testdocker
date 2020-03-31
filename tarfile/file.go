@@ -5,7 +5,6 @@ import (
 	"compress/gzip"
 	"fmt"
 	"io"
-	"io/ioutil"
 	"os"
 	"strings"
 )
@@ -39,8 +38,14 @@ func ExtractFileFromTar(r io.Reader, filePath string) ([]byte, error) {
 		if err != nil {
 			return nil, err
 		}
+
 		if hdr.Name == filePath {
-			return ioutil.ReadAll(r)
+			data := make([]byte, hdr.Size)
+			_, err := tf.Read(data)
+			if err != nil && err != io.EOF {
+				return nil, fmt.Errorf("unable to read file: %s", err)
+			}
+			return data, nil
 		}
 	}
 	return nil, fmt.Errorf("file %s not found in tar", filePath)

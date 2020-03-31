@@ -75,8 +75,9 @@ func TestNewDockerRegistry_manifestHandler(t *testing.T) {
 			imagesPresent: map[string]string{
 				"v2/alpine:ref123": "testdata/alpine.tar",
 			},
-			expectedStatusCode:   http.StatusOK,
-			expectedResponseBody: "valid manifest json",
+			expectedStatusCode: http.StatusOK,
+			expectedResponseBody: `[{"Config":"af341ccd2df8b0e2d67cf8dd32e087bfda4e5756ebd1c76bbf3efa0dc246590e.json","RepoTags":["alpine:3.10"],"Layers":["71dba1fabbde4baabcdebcde4895d3f3887e388b09cef162f8159cf7daffa1b8/layer.tar"]}]
+`,
 		},
 
 		// TODO: Add sad paths
@@ -94,7 +95,7 @@ func TestNewDockerRegistry_manifestHandler(t *testing.T) {
 			}
 
 			// run until shutdown received
-			ctx, cancel := context.WithTimeout(context.Background(), time.Second*10)
+			ctx, cancel := context.WithTimeout(context.Background(), time.Second*1)
 			defer func() {
 				_ = srv.Shutdown(ctx)
 				cancel()
@@ -104,6 +105,9 @@ func TestNewDockerRegistry_manifestHandler(t *testing.T) {
 			go func() {
 				_ = srv.ListenAndServe()
 			}()
+
+			// wait for the server to start
+			time.Sleep(time.Millisecond * 10)
 
 			resp, err := http.Get("http://" + srv.Addr + tc.urlPath)
 			switch {
