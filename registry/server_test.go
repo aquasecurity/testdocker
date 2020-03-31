@@ -79,8 +79,27 @@ func TestNewDockerRegistry_manifestHandler(t *testing.T) {
 			expectedResponseBody: `[{"Config":"af341ccd2df8b0e2d67cf8dd32e087bfda4e5756ebd1c76bbf3efa0dc246590e.json","RepoTags":["alpine:3.10"],"Layers":["71dba1fabbde4baabcdebcde4895d3f3887e388b09cef162f8159cf7daffa1b8/layer.tar"]}]
 `,
 		},
-
-		// TODO: Add sad paths
+		{
+			name:               "sad path, image not found",
+			urlPath:            "/v2/bogusimage/manifests/ref123",
+			expectedStatusCode: http.StatusNotFound,
+		},
+		{
+			name:    "sad path, image exists but tar not found",
+			urlPath: "/v2/notarfile/manifests/ref123",
+			imagesPresent: map[string]string{
+				"v2/notarfile:ref123": "doesntexist.tar",
+			},
+			expectedStatusCode: http.StatusInternalServerError,
+		},
+		{
+			name:    "sad path, image exists but tar is corrupt",
+			urlPath: "/v2/corrupt/manifests/ref123",
+			imagesPresent: map[string]string{
+				"v2/corrupt:ref123": "testdata/corrupt.tar",
+			},
+			expectedStatusCode: http.StatusInternalServerError,
+		},
 	}
 
 	for _, tc := range testCases {
