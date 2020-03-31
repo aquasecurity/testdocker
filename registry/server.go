@@ -3,47 +3,54 @@ package registry
 import (
 	"fmt"
 	"net/http"
-	"net/http/httptest"
-	"strings"
 
 	"github.com/aquasecurity/testdocker/tarfile"
+	"github.com/gorilla/mux"
 )
 
-func NewDockerRegistry(images map[string]string) *httptest.Server {
-	// TODO: rewrite with gorilla/mux
-	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		p := strings.Trim(r.URL.Path, "/")
-		s := strings.Split(p, "/")
+type Registry struct {
+	Images map[string]string
+}
 
-		switch {
-		case len(s) == 1 && s[0] == "v2":
-			// ping
-			w.WriteHeader(http.StatusOK)
-			return
-		case len(s) == 5 && s[3] == "manifests":
-			// manifest.json
-			imageName := fmt.Sprintf("%s/%s:%s", s[1], s[2], s[4])
-			filePath, ok := images[imageName]
-			if !ok {
-				http.NotFound(w, r)
-				return
-			}
+func (rg Registry) pingHandler(w http.ResponseWriter, r *http.Request) {
+	switch mux.Vars(r)["apiVersion"] {
+	case "v2":
+		w.WriteHeader(http.StatusOK)
+	default:
+		w.WriteHeader(http.StatusNotImplemented)
+	}
+}
 
-			r, err := tarfile.Open(filePath)
-			if err != nil {
-				http.Error(w, "error", http.StatusInternalServerError)
-			}
+func (rg Registry) manifestHandler(w http.ResponseWriter, r *http.Request) {
+	vars := mux.Vars(r)
+	imageName := fmt.Sprintf("%s/%s:%s", vars["apiVersion"], vars["name"], vars["reference"])
+	filePath, ok := rg.Images[imageName]
+	if !ok {
+		w.WriteHeader(http.StatusNotFound)
+		return
+	}
 
-			b, err := tarfile.ExtractFileFromTar(r, "manifest.json")
-			if err != nil {
-				http.Error(w, "error", http.StatusInternalServerError)
-			}
+	f, err := tarfile.Open(filePath)
+	if err != nil {
+		w.WriteHeader(http.StatusInternalServerError)
+		return
+	}
 
-			_, _ = w.Write(b)
-			return
-		default:
-			http.NotFound(w, r)
-		}
-	}))
-	return ts
+	b, err := tarfile.ExtractFileFromTar(f, "manifest.json")
+	if err != nil {
+		w.WriteHeader(http.StatusInternalServerError)
+		return
+	}
+
+	w.WriteHeader(http.StatusOK)
+	_, _ = w.Write(b)
+}
+
+func NewDockerRegistry(images map[string]string) *mux.Router {
+	rg := Registry{Images: images}
+
+	r := mux.NewRouter()
+	r.HandleFunc("/{apiVersion}", rg.pingHandler)
+	r.HandleFunc("/{apiVersion}/{name}/manifests/{reference}", rg.manifestHandler)
+	return r
 }
