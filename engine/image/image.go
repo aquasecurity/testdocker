@@ -79,10 +79,12 @@ func (s *imageRouter) getImagesGet(ctx context.Context, w http.ResponseWriter, r
 
 	if len(names) == 0 {
 		http.Error(w, "'name' or 'names' must be specified", http.StatusBadRequest)
+		return nil
 	}
 
 	if len(names) > 1 {
 		http.Error(w, "testdocker doesn't support multiple images", http.StatusBadRequest)
+		return nil
 	}
 
 	name := names[0]
