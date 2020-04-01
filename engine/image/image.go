@@ -10,6 +10,7 @@ import (
 
 	"github.com/docker/docker/pkg/ioutils"
 
+	"github.com/docker/docker/api/server/httputils"
 	"github.com/docker/docker/api/server/router"
 )
 
@@ -67,10 +68,15 @@ func (s *imageRouter) getImagesByName(ctx context.Context, w http.ResponseWriter
 
 // ref. https://github.com/moby/moby/blob/cb3ec99b1674e0bf4988edc3fed5f6c7dabeda45/api/server/router/image/image_routes.go#L144
 func (s *imageRouter) getImagesGet(ctx context.Context, w http.ResponseWriter, r *http.Request, vars map[string]string) error {
+	if err := httputils.ParseForm(r); err != nil {
+		return err
+	}
+
 	w.Header().Set("Content-Type", "application/x-tar")
 
 	output := ioutils.NewWriteFlusher(w)
 	defer output.Close()
+
 	var names []string
 	if name, ok := vars["name"]; ok {
 		names = []string{name}
