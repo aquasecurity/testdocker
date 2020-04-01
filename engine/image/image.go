@@ -41,6 +41,7 @@ func (s *imageRouter) initRoutes() {
 		// GET
 		router.NewGetRoute("/images/{name:.*}/json", s.getImagesByName),
 		router.NewGetRoute("/images/{name:.*}/get", s.getImagesGet),
+		router.NewGetRoute("/images/get", s.getImagesGet),
 	}
 }
 
