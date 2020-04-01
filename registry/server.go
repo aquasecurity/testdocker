@@ -46,11 +46,28 @@ func (rg Registry) manifestHandler(w http.ResponseWriter, r *http.Request) {
 	_, _ = w.Write(b)
 }
 
-func NewDockerRegistry(images map[string]string) *mux.Router {
+func (rg Registry) blobHandler(w http.ResponseWriter, r *http.Request) {
+	vars := mux.Vars(r)
+
+	blobName := fmt.Sprintf("%s/%s:%s", vars["apiVersion"], vars["name"], vars["digest"])
+	blobPath, ok := rg.Images[blobName]
+	if !ok {
+		w.WriteHeader(http.StatusNotFound)
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/octet-stream")
+	w.Header().Set("Docker-Content-Digest", vars["digest"])
+	http.ServeFile(w, r, blobPath)
+	return
+}
+
+func NewDockerRegistry(images map[string]string) *mux.Router { // TODO: Change images to be a better struct
 	rg := Registry{Images: images}
 
 	r := mux.NewRouter()
-	r.HandleFunc("/{apiVersion}", rg.pingHandler)
-	r.HandleFunc("/{apiVersion}/{name}/manifests/{reference}", rg.manifestHandler)
+	r.HandleFunc("/{apiVersion}", rg.pingHandler).Methods("GET")
+	r.HandleFunc("/{apiVersion}/{name}/manifests/{reference}", rg.manifestHandler).Methods("GET")
+	r.HandleFunc("/{apiVersion}/{name}/blobs/{digest}", rg.blobHandler).Methods("GET")
 	return r
 }
