@@ -9,13 +9,13 @@ import (
 	"strings"
 )
 
-func Open(filePath string) (io.Reader, error) {
+func Open(filePath string) (io.ReadCloser, error) {
 	f, err := os.Open(filePath)
 	if err != nil {
 		return nil, err
 	}
 
-	var r io.Reader
+	var r io.ReadCloser
 	if strings.HasSuffix(filePath, ".gz") {
 		r, err = gzip.NewReader(f)
 		if err != nil {
