@@ -16,9 +16,8 @@ const (
 )
 
 type Option struct {
-	APIVersion   string
-	ImagePaths   map[string]string
-	InspectPaths map[string]string
+	APIVersion string
+	ImagePaths map[string]string
 }
 
 func NewDockerEngine(opt Option) *httptest.Server {
@@ -27,7 +26,7 @@ func NewDockerEngine(opt Option) *httptest.Server {
 	}
 
 	var routes []router.Router
-	routes = append(routes, image.NewRouter(opt.ImagePaths, opt.InspectPaths))
+	routes = append(routes, image.NewRouter(opt.ImagePaths))
 
 	m := server.CreateMux(routes)
 	m.Path("/_ping").Methods("GET").Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
