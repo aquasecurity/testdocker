@@ -7,6 +7,9 @@ import (
 	"net/http"
 	"strings"
 
+	"github.com/docker/docker/errdefs"
+	"golang.org/x/xerrors"
+
 	"github.com/docker/docker/api/server/router"
 	v1 "github.com/google/go-containerregistry/pkg/v1"
 	"github.com/google/go-containerregistry/pkg/v1/tarball"
@@ -49,8 +52,7 @@ func (s *registryRouter) pingHandler(ctx context.Context, w http.ResponseWriter,
 	case "2":
 		return nil
 	default:
-		w.WriteHeader(http.StatusNotImplemented) // TODO: replace this line with returning error
-		return nil
+		return errdefs.NotImplemented(xerrors.Errorf("unknown version: v%s", vars["version"]))
 	}
 }
 
@@ -58,8 +60,7 @@ func (s *registryRouter) manifestHandler(ctx context.Context, w http.ResponseWri
 	imageName := fmt.Sprintf("v%s/%s:%s", vars["version"], vars["name"], vars["reference"])
 	filePath, ok := s.images[imageName]
 	if !ok {
-		w.WriteHeader(http.StatusNotFound) // TODO: replace this line with returning error
-		return nil
+		return errdefs.NotFound(xerrors.Errorf("unknown image: %s", imageName))
 	}
 
 	opener := func() (io.ReadCloser, error) {
@@ -68,17 +69,18 @@ func (s *registryRouter) manifestHandler(ctx context.Context, w http.ResponseWri
 
 	img, err := tarball.Image(opener, nil)
 	if err != nil {
-		return err
+		return errdefs.NotFound(xerrors.Errorf("unknown image: %s", filePath))
 	}
 
 	b, err := img.RawManifest()
 	if err != nil {
-		return err
+		return errdefs.Unavailable(err)
 	}
 
-	w.WriteHeader(http.StatusOK)
-	_, err = w.Write(b)
-	return err
+	if _, err = w.Write(b); err != nil {
+		return errdefs.Unavailable(err)
+	}
+	return nil
 }
 
 func (s *registryRouter) blobHandler(ctx context.Context, w http.ResponseWriter, r *http.Request, vars map[string]string) error {
@@ -90,47 +92,49 @@ func (s *registryRouter) blobHandler(ctx context.Context, w http.ResponseWriter,
 
 		img, err := tarball.ImageFromPath(filePath, nil)
 		if err != nil {
-			return err
+			return errdefs.Unavailable(err)
 		}
 
 		h, err := v1.NewHash(vars["digest"])
 		if err != nil {
-			return err
+			return errdefs.InvalidParameter(err)
 		}
 
 		// return the config file
 		configName, err := img.ConfigName()
 		if err != nil {
-			return err
+			return errdefs.Unavailable(err)
 		}
 
 		if configName == h {
 			b, err := img.RawConfigFile()
 			if err != nil {
-				return err
+				return errdefs.Unavailable(err)
 			}
 			w.Header().Set("Content-Type", "application/octet-stream")
 			_, err = w.Write(b)
-			return err
+			return errdefs.Unavailable(err)
 		}
 
 		// return the layer content
 		l, err := img.LayerByDigest(h)
 		if err != nil {
+			return errdefs.Unavailable(err)
 		}
 
 		rc, err := l.Compressed()
 		if err != nil {
-			return err
+			return errdefs.Unavailable(err)
 		}
 
 		w.Header().Set("Content-Type", "application/octet-stream")
 		w.Header().Set("Docker-Content-Digest", vars["digest"])
 		w.WriteHeader(http.StatusOK)
-		io.Copy(w, rc)
+		if _, err = io.Copy(w, rc); err != nil {
+			return errdefs.Unavailable(err)
+		}
 		return nil
 	}
 
-	w.WriteHeader(http.StatusNotFound) // TODO: replace this line with returning error
-	return nil
+	return errdefs.NotFound(xerrors.Errorf("unknown image: %s", imageName))
 }

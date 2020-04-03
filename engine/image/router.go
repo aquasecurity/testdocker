@@ -6,6 +6,8 @@ import (
 	"io"
 	"net/http"
 
+	"github.com/docker/docker/errdefs"
+
 	"github.com/docker/docker/api/server/httputils"
 	"github.com/docker/docker/api/server/router"
 	"github.com/docker/docker/api/types"
@@ -51,11 +53,9 @@ func (s *imageRouter) initRoutes() {
 // ref. https://github.com/moby/moby/blob/852542b3976754f62232f1fafca7fd35deeb1da3/api/server/router/image/image.go#L34
 func (s *imageRouter) getImagesByName(ctx context.Context, w http.ResponseWriter, r *http.Request, vars map[string]string) error {
 	imageName := vars["name"]
-	//filePath, ok := s.inspects[imageName]
 	filePath, ok := s.images[imageName]
 	if !ok {
-		http.NotFound(w, r)
-		return nil
+		return errdefs.NotFound(xerrors.Errorf("unknown image: %s", imageName))
 	}
 
 	opener := func() (io.ReadCloser, error) {
@@ -64,36 +64,36 @@ func (s *imageRouter) getImagesByName(ctx context.Context, w http.ResponseWriter
 
 	img, err := tarball.Image(opener, nil)
 	if err != nil {
-		return err
+		return errdefs.NotFound(xerrors.Errorf("unable to open the file path (%s): %w", filePath, err))
 	}
 
 	rc, err := tarfile.Open(filePath)
 	if err != nil {
-		return err
+		return errdefs.NotFound(xerrors.Errorf("unable to open the file path (%s): %w", filePath, err))
 	}
 
 	b, err := tarfile.ExtractFileFromTar(rc, "manifest.json")
 	if err != nil {
-		return err
+		return errdefs.Unavailable(err)
 	}
 
 	var manifests tarball.Manifest
 	if err := json.Unmarshal(b, &manifests); err != nil {
-		return err
+		return errdefs.Unavailable(err)
 	}
 
 	if len(manifests) != 1 {
-		return xerrors.New("tarball must contain only a single image to be used with testdocker")
+		return errdefs.Unavailable(xerrors.New("tarball must contain only a single image to be used with testdocker"))
 	}
 
 	config, err := img.ConfigFile()
 	if err != nil {
-		return err
+		return errdefs.Unavailable(err)
 	}
 
 	manifest, err := img.Manifest()
 	if err != nil {
-		return err
+		return errdefs.Unavailable(err)
 	}
 
 	exposedPorts := nat.PortSet{}
@@ -171,7 +171,7 @@ func (s *imageRouter) getImagesByName(ctx context.Context, w http.ResponseWriter
 	}
 
 	if err = json.NewEncoder(w).Encode(inspect); err != nil {
-		return err
+		return errdefs.Unavailable(xerrors.Errorf("unable to encode JSON: %w", err))
 	}
 
 	return nil
@@ -180,7 +180,7 @@ func (s *imageRouter) getImagesByName(ctx context.Context, w http.ResponseWriter
 // ref. https://github.com/moby/moby/blob/cb3ec99b1674e0bf4988edc3fed5f6c7dabeda45/api/server/router/image/image_routes.go#L144
 func (s *imageRouter) getImagesGet(ctx context.Context, w http.ResponseWriter, r *http.Request, vars map[string]string) error {
 	if err := httputils.ParseForm(r); err != nil {
-		return err
+		return errdefs.InvalidParameter(err)
 	}
 
 	w.Header().Set("Content-Type", "application/x-tar")
@@ -196,29 +196,29 @@ func (s *imageRouter) getImagesGet(ctx context.Context, w http.ResponseWriter, r
 	}
 
 	if len(names) == 0 {
-		http.Error(w, "'name' or 'names' must be specified", http.StatusBadRequest)
-		return nil
+		err := xerrors.New("'name' or 'names' must be specified")
+		return errdefs.InvalidParameter(err)
 	}
 
 	if len(names) > 1 {
-		http.Error(w, "testdocker doesn't support multiple images", http.StatusBadRequest)
-		return nil
+		err := xerrors.New("testdocker doesn't support multiple images")
+		return errdefs.InvalidParameter(err)
 	}
 
 	name := names[0]
 	filePath, ok := s.images[name]
 	if !ok {
-		http.NotFound(w, r)
-		return nil
+		return errdefs.NotFound(xerrors.Errorf("unknown image: %s", name))
 	}
 
 	f, err := tarfile.Open(filePath)
 	if err != nil {
-		return err
+		return errdefs.NotFound(xerrors.Errorf("unknown image (%s): %w", filePath, err))
 	}
 
 	if _, err = io.Copy(w, f); err != nil {
-		return err
+		return errdefs.Unavailable(err)
 	}
+
 	return nil
 }
