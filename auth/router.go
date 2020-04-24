@@ -25,6 +25,15 @@ type authRouter struct {
 	auth   Auth
 }
 
+// ref. https://docs.docker.com/registry/spec/auth/token/#requesting-a-token
+type TokenResponse struct {
+	Token        string    `json:"token"`
+	AccessToken  string    `json:"access_token"`
+	ExpiresIn    int       `json:"expires_in"`
+	IssuedAt     time.Time `json:"issued_at"`
+	RefreshToken string    `json:"refresh_token"`
+}
+
 type Auth struct {
 	User     string // required
 	Password string // required
@@ -58,10 +67,10 @@ func (a *authRouter) initRoutes() {
 }
 
 func (a *authRouter) tokenHandler(ctx context.Context, w http.ResponseWriter, r *http.Request, vars map[string]string) error {
-	// Authorization: Basic dGVzdDp0ZXN0cGFzcwo=
+	// Authorization: Basic dGVzdDp0ZXN0cGFzcw==
 	authorization := r.Header.Get("Authorization")
 
-	// Basic dGVzdDp0ZXN0cGFzcwo=
+	// Basic dGVzdDp0ZXN0cGFzcw==
 	s := strings.Fields(authorization)
 	if len(s) != 2 {
 		return errdefs.Unauthorized(xerrors.New("invalid Authorization header"))
@@ -70,7 +79,7 @@ func (a *authRouter) tokenHandler(ctx context.Context, w http.ResponseWriter, r 
 		return errdefs.Unauthorized(xerrors.New("'Basic' must be specified"))
 	}
 
-	// dGVzdDp0ZXN0cGFzcwo=
+	// dGVzdDp0ZXN0cGFzcw==
 	decoded, err := base64.StdEncoding.DecodeString(s[1])
 	if err != nil {
 		return errdefs.Unauthorized(err)
@@ -90,16 +99,7 @@ func (a *authRouter) tokenHandler(ctx context.Context, w http.ResponseWriter, r 
 		return err
 	}
 
-	// ref. https://docs.docker.com/registry/spec/auth/token/#requesting-a-token
-	type tokenResponse struct {
-		Token        string    `json:"token"`
-		AccessToken  string    `json:"access_token"`
-		ExpiresIn    int       `json:"expires_in"`
-		IssuedAt     time.Time `json:"issued_at"`
-		RefreshToken string    `json:"refresh_token"`
-	}
-
-	t := tokenResponse{
+	t := TokenResponse{
 		Token:       tokenString,
 		AccessToken: tokenString,
 		ExpiresIn:   60,
