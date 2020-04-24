@@ -3,7 +3,10 @@ package registry
 import (
 	"io/ioutil"
 	"net/http"
+	"regexp"
 	"testing"
+
+	"github.com/aquasecurity/testdocker/auth"
 
 	"github.com/stretchr/testify/require"
 
@@ -12,14 +15,52 @@ import (
 
 func TestNewDockerRegistry_pingHandler(t *testing.T) {
 	testCases := []struct {
-		name               string
-		urlPath            string
-		expectedStatusCode int
+		name                 string
+		urlPath              string
+		token                string
+		DockerRegistryOption Option
+		expectedStatusCode   int
+		expectedAuthHeader   string
 	}{
 		{
 			name:               "happy path, /v2 reports StatusOK",
 			urlPath:            "/v2/",
+			token:              "Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiIxMjM0NTY3ODkwIiwibmFtZSI6IkpvaG4gRG9lIiwiaWF0IjoxNTE2MjM5MDIyfQ.KfyUtgtGTUag8XnYyts8qwDn4cCkFEnEBmEkWWxJNGU",
 			expectedStatusCode: http.StatusOK,
+			DockerRegistryOption: Option{
+				Auth: auth.Auth{
+					User:     "testuser",
+					Password: "testpassword",
+					Secret:   "foo-is-the-secret",
+				},
+			},
+		},
+		{
+			name:               "sad path, /v2 with invalid jwt auth",
+			urlPath:            "/v2/",
+			token:              "Bearer invalidtoken",
+			expectedStatusCode: http.StatusUnauthorized,
+			DockerRegistryOption: Option{
+				Auth: auth.Auth{
+					User:     "testuser",
+					Password: "testpassword",
+					Secret:   "foo-is-the-secret",
+				},
+			},
+		},
+		{
+			name:               "sad path, /v2 with invalid token",
+			urlPath:            "/v2/",
+			token:              "badinvalidtoken",
+			expectedStatusCode: http.StatusUnauthorized,
+			expectedAuthHeader: `Bearer realm=http://127.0.0.1:[0-9]*/token`,
+			DockerRegistryOption: Option{
+				Auth: auth.Auth{
+					User:     "testuser",
+					Password: "testpassword",
+					Secret:   "foo-is-the-secret",
+				},
+			},
 		},
 		{
 			name:               "sad path, /v3 reports StatusNotImplemented",
@@ -30,10 +71,19 @@ func TestNewDockerRegistry_pingHandler(t *testing.T) {
 
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
-			r := NewDockerRegistry(Option{})
-			resp, err := http.Get(r.URL + tc.urlPath)
+			r := NewDockerRegistry(tc.DockerRegistryOption)
+
+			client := http.DefaultClient
+
+			req, err := http.NewRequest(http.MethodGet, r.URL+tc.urlPath, nil)
+			req.Header.Set("Authorization", tc.token)
+
+			resp, err := client.Do(req)
 			assert.NoError(t, err, tc.name)
 			assert.Equal(t, tc.expectedStatusCode, resp.StatusCode, tc.name)
+			if tc.expectedAuthHeader != "" {
+				assert.Regexp(t, regexp.MustCompile(tc.expectedAuthHeader), resp.Header.Get("Www-Authenticate"), tc.name)
+			}
 		})
 	}
 }
