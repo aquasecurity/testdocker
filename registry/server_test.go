@@ -236,7 +236,6 @@ func TestNewDockerRegistry_blobHandler(t *testing.T) {
 func TestNewDockerRegistry_tokenHandler(t *testing.T) {
 	testCases := []struct {
 		name                 string
-		urlPath              string
 		token                string
 		DockerRegistryOption Option
 		expectedStatusCode   int
@@ -244,7 +243,6 @@ func TestNewDockerRegistry_tokenHandler(t *testing.T) {
 	}{
 		{
 			name:               "happy path, /token gives a valid token",
-			urlPath:            "/token",
 			token:              "Basic dGVzdDp0ZXN0cGFzcw==",
 			expectedStatusCode: http.StatusOK,
 			DockerRegistryOption: Option{
@@ -256,6 +254,54 @@ func TestNewDockerRegistry_tokenHandler(t *testing.T) {
 			},
 			expectedToken: "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJ0ZXN0ZG9ja2VyIn0.CGZfXiScHPFrDR3UzKCFodOiT7DPsdrrZsblGQakLN8",
 		},
+		{
+			name:               "sad path, /token invalid auth token",
+			token:              "invalidtoken",
+			expectedStatusCode: http.StatusUnauthorized,
+			DockerRegistryOption: Option{
+				Auth: auth.Auth{
+					User:     "test",
+					Password: "testpass",
+					Secret:   "foo-is-the-secret",
+				},
+			},
+		},
+		{
+			name:               "sad path, /token non basic auth token",
+			token:              "NotBasic: token",
+			expectedStatusCode: http.StatusUnauthorized,
+			DockerRegistryOption: Option{
+				Auth: auth.Auth{
+					User:     "test",
+					Password: "testpass",
+					Secret:   "foo-is-the-secret",
+				},
+			},
+		},
+		{
+			name:               "sad path, /token Basic invalid auth token malformed base64",
+			token:              "Basic notabase64token",
+			expectedStatusCode: http.StatusUnauthorized,
+			DockerRegistryOption: Option{
+				Auth: auth.Auth{
+					User:     "test",
+					Password: "testpass",
+					Secret:   "foo-is-the-secret",
+				},
+			},
+		},
+		{
+			name:               "sad path, /token Basic invalid auth token, invalid username:password",
+			token:              "Basic aW52YWxpZHVzZXI6YmFkcGFzc3dvcmQ=",
+			expectedStatusCode: http.StatusUnauthorized,
+			DockerRegistryOption: Option{
+				Auth: auth.Auth{
+					User:     "test",
+					Password: "testpass",
+					Secret:   "foo-is-the-secret",
+				},
+			},
+		},
 	}
 
 	for _, tc := range testCases {
@@ -264,7 +310,7 @@ func TestNewDockerRegistry_tokenHandler(t *testing.T) {
 
 			client := http.DefaultClient
 
-			req, err := http.NewRequest(http.MethodGet, r.URL+tc.urlPath, nil)
+			req, err := http.NewRequest(http.MethodGet, r.URL+"/token", nil)
 			req.Header.Set("Authorization", tc.token)
 
 			resp, err := client.Do(req)
@@ -278,11 +324,17 @@ func TestNewDockerRegistry_tokenHandler(t *testing.T) {
 			err = json.Unmarshal(body, &got)
 			require.NoError(t, err, tc.name)
 
-			assert.Equal(t, tc.expectedToken, got.AccessToken, tc.name)
-			assert.Equal(t, tc.expectedToken, got.Token, tc.name)
-			assert.Equal(t, 60, got.ExpiresIn, tc.name)
-			assert.True(t, time.Now().After(got.IssuedAt), tc.name)
-			assert.Empty(t, got.RefreshToken, tc.name)
+			switch {
+			case tc.expectedToken != "":
+				assert.Equal(t, tc.expectedToken, got.AccessToken, tc.name)
+				assert.Equal(t, tc.expectedToken, got.Token, tc.name)
+				assert.Equal(t, 60, got.ExpiresIn, tc.name)
+				assert.True(t, time.Now().After(got.IssuedAt), tc.name)
+				assert.Empty(t, got.RefreshToken, tc.name)
+			default:
+				assert.Empty(t, got.AccessToken, tc.name)
+			}
+
 		})
 	}
 }
