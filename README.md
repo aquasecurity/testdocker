@@ -2,6 +2,8 @@
 
 # Progress
 - Docker Registry
+  - [x] Authentication
+  - [ ] Authorization
   - [x] [Ping](https://docs.docker.com/registry/spec/api/#base)
   - [ ] [Tags](https://docs.docker.com/registry/spec/api/#tags)
   - [x] [Manifest](https://docs.docker.com/registry/spec/api/#manifest)
