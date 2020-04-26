@@ -4,6 +4,7 @@ go 1.14
 
 require (
 	github.com/containerd/containerd v1.3.3 // indirect
+	github.com/dgrijalva/jwt-go v3.2.0+incompatible
 	github.com/docker/docker v1.4.2-0.20190924003213-a8608b5b67c7
 	github.com/docker/go-connections v0.4.0
 	github.com/gogo/protobuf v1.3.1 // indirect
