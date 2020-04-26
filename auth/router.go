@@ -96,7 +96,7 @@ func (a *authRouter) tokenHandler(ctx context.Context, w http.ResponseWriter, r 
 
 	tokenString, err := token.SignedString([]byte(a.auth.Secret))
 	if err != nil {
-		return err
+		return errdefs.Unavailable(err)
 	}
 
 	t := TokenResponse{
