@@ -90,9 +90,13 @@ func (s *registryRouter) blobHandler(ctx context.Context, w http.ResponseWriter,
 			continue
 		}
 
-		img, err := tarball.ImageFromPath(filePath, nil)
+		opener := func() (io.ReadCloser, error) {
+			return tarfile.Open(filePath)
+		}
+
+		img, err := tarball.Image(opener, nil)
 		if err != nil {
-			return errdefs.Unavailable(err)
+			return errdefs.NotFound(xerrors.Errorf("unknown image: %s", filePath))
 		}
 
 		h, err := v1.NewHash(vars["digest"])
