@@ -1,14 +1,15 @@
 package engine
 
 import (
+	"fmt"
+	"net"
 	"net/http"
 	"net/http/httptest"
-
-	"github.com/aquasecurity/testdocker/server"
 
 	"github.com/docker/docker/api/server/router"
 
 	"github.com/aquasecurity/testdocker/engine/image"
+	"github.com/aquasecurity/testdocker/server"
 )
 
 const (
@@ -16,8 +17,9 @@ const (
 )
 
 type Option struct {
-	APIVersion string
-	ImagePaths map[string]string
+	APIVersion       string
+	ImagePaths       map[string]string
+	UnixDomainSocket string
 }
 
 func NewDockerEngine(opt Option) *httptest.Server {
@@ -34,5 +36,23 @@ func NewDockerEngine(opt Option) *httptest.Server {
 		w.WriteHeader(http.StatusOK)
 	}))
 
+	if opt.UnixDomainSocket != "" {
+		newUnixDomainSocketServer(opt.UnixDomainSocket, m)
+	}
+
 	return httptest.NewServer(m)
+}
+
+func newUnixDomainSocketServer(socketPath string, handler http.Handler) *httptest.Server {
+	unixListener, err := net.Listen("unix", socketPath)
+	if err != nil {
+		panic(fmt.Sprintf("failed to listen on %s: %s", socketPath, err))
+	}
+
+	s := &httptest.Server{
+		Listener: unixListener,
+		Config:   &http.Server{Handler: handler},
+	}
+	s.Start()
+	return s
 }
