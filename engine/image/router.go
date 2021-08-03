@@ -1,25 +1,26 @@
 package image
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
+	"fmt"
+	"github.com/docker/docker/errdefs"
 	"io"
 	"net/http"
 
-	"github.com/docker/docker/errdefs"
-
+	"github.com/aquasecurity/testdocker/tarfile"
 	"github.com/docker/docker/api/server/httputils"
 	"github.com/docker/docker/api/server/router"
 	"github.com/docker/docker/api/types"
 	"github.com/docker/docker/api/types/container"
+	itype "github.com/docker/docker/api/types/image"
 	"github.com/docker/docker/pkg/ioutils"
 	"github.com/docker/go-connections/nat"
 	"github.com/google/go-containerregistry/pkg/v1/tarball"
 	"golang.org/x/xerrors"
-
-	"github.com/aquasecurity/testdocker/tarfile"
 )
-
+const DATE_FORMAT = "2006-01-02 15:04:05.000000000 -0700 MST"
 // imageRouter is a router to talk with the image controller
 type imageRouter struct {
 	routes []router.Route
@@ -47,6 +48,7 @@ func (s *imageRouter) initRoutes() {
 		router.NewGetRoute("/images/{name:.*}/json", s.getImagesByName),
 		router.NewGetRoute("/images/{name:.*}/get", s.getImagesGet),
 		router.NewGetRoute("/images/get", s.getImagesGet),
+		router.NewGetRoute("/images/{name:.*}/history", s.getImageHistory),
 	}
 }
 
@@ -144,14 +146,13 @@ func (s *imageRouter) getImagesByName(ctx context.Context, w http.ResponseWriter
 		StopTimeout:     nil, // not supported
 		Shell:           config.Config.Shell,
 	}
-
 	inspect := types.ImageInspect{
 		ID:              manifest.Config.Digest.String(),
 		RepoTags:        manifests[0].RepoTags,
 		RepoDigests:     nil, // not supported
 		Parent:          "",  // not supported
 		Comment:         "",  // not supported
-		Created:         config.Created.String(),
+		Created:         config.Created.Time.Format(DATE_FORMAT),
 		Container:       config.Container,
 		ContainerConfig: containerConfig,
 		DockerVersion:   config.DockerVersion,
@@ -218,6 +219,92 @@ func (s *imageRouter) getImagesGet(ctx context.Context, w http.ResponseWriter, r
 
 	if _, err = io.Copy(w, f); err != nil {
 		return errdefs.Unavailable(err)
+	}
+
+	return nil
+}
+
+
+func (s *imageRouter) getImageHistory(ctx context.Context, w http.ResponseWriter, r *http.Request, vars map[string]string) error {
+	imageName := vars["name"]
+	filePath, ok := s.images[imageName]
+	if !ok {
+		return errdefs.NotFound(xerrors.Errorf("unknown image: %s", imageName))
+	}
+
+	opener := func() (io.ReadCloser, error) {
+		return tarfile.Open(filePath)
+	}
+
+	img, err := tarball.Image(opener, nil)
+	if err != nil {
+		return errdefs.NotFound(xerrors.Errorf("unable to open the file path (%s): %w", filePath, err))
+	}
+
+	config, err := img.ConfigFile()
+	if err != nil {
+		return errdefs.Unavailable(err)
+	}
+
+	rc, err := tarfile.Open(filePath)
+	defer rc.Close()
+	if err != nil {
+		return errdefs.NotFound(xerrors.Errorf("unable to open the file path (%s): %w", filePath, err))
+	}
+
+	b, err := tarfile.ExtractFileFromTar(rc, "manifest.json")
+	if err != nil {
+		return errdefs.Unavailable(err)
+	}
+
+	var manifests tarball.Manifest
+	if err := json.Unmarshal(b, &manifests); err != nil {
+		return errdefs.Unavailable(err)
+	}
+
+	if len(manifests) != 1 {
+		return errdefs.Unavailable(xerrors.New("tarball must contain only a single image to be used with testdocker"))
+	}
+	var allLayerSizes []int64
+	for _, manifest := range manifests{
+		fmt.Println(manifest.Layers)
+		for _, layerPath := range manifest.Layers{
+			rc, err := tarfile.Open(filePath)
+			if err != nil {
+				return errdefs.NotFound(xerrors.Errorf("unable to open the file path (%s): %w", filePath, err))
+			}
+			layerTarByte, err := tarfile.ExtractFileFromTar(rc, layerPath)
+			if err != nil {
+				return errdefs.Unavailable(err)
+			}
+			r := bytes.NewReader(layerTarByte)
+			layerSize,err  := tarfile.UncompressedLayerSize(r)
+			if err != nil {
+				return errdefs.Unavailable(err)
+			}
+			allLayerSizes = append(allLayerSizes, layerSize)
+		}
+	}
+	var inspectHistory []itype.HistoryResponseItem
+	var layerSize int64
+	layerIndex :=0
+	for _, configHistory := range config.History{
+		if configHistory.EmptyLayer{
+			layerSize = 0
+		}else{
+			layerSize = allLayerSizes[layerIndex]
+			layerIndex ++
+		}
+		inspectHistory = append(inspectHistory,itype.HistoryResponseItem{
+			Comment:   configHistory.Comment,
+			Created:   configHistory.Created.Unix(),
+			CreatedBy: configHistory.CreatedBy,
+			Size: layerSize,
+		})
+	}
+
+	if err = json.NewEncoder(w).Encode(inspectHistory); err != nil {
+		return errdefs.Unavailable(xerrors.Errorf("unable to encode JSON: %w", err))
 	}
 
 	return nil
