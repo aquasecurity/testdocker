@@ -1,13 +1,12 @@
 package image
 
 import (
-	"bytes"
 	"context"
 	"encoding/json"
-	"fmt"
-	"github.com/docker/docker/errdefs"
 	"io"
 	"net/http"
+
+	"github.com/docker/docker/errdefs"
 
 	"github.com/aquasecurity/testdocker/tarfile"
 	"github.com/docker/docker/api/server/httputils"
@@ -20,7 +19,9 @@ import (
 	"github.com/google/go-containerregistry/pkg/v1/tarball"
 	"golang.org/x/xerrors"
 )
+
 const DATE_FORMAT = "2006-01-02 15:04:05.000000000 -0700 MST"
+
 // imageRouter is a router to talk with the image controller
 type imageRouter struct {
 	routes []router.Route
@@ -224,7 +225,6 @@ func (s *imageRouter) getImagesGet(ctx context.Context, w http.ResponseWriter, r
 	return nil
 }
 
-
 func (s *imageRouter) getImageHistory(ctx context.Context, w http.ResponseWriter, r *http.Request, vars map[string]string) error {
 	imageName := vars["name"]
 	filePath, ok := s.images[imageName]
@@ -240,66 +240,42 @@ func (s *imageRouter) getImageHistory(ctx context.Context, w http.ResponseWriter
 	if err != nil {
 		return errdefs.NotFound(xerrors.Errorf("unable to open the file path (%s): %w", filePath, err))
 	}
-
+	layers, err := img.Layers()
+	if err != nil {
+		return errdefs.Unavailable(err)
+	}
+	var allLayerSizes []int64
+	for _, layer := range layers {
+		reader, err := layer.Uncompressed()
+		if err != nil {
+			return errdefs.Unavailable(err)
+		}
+		layerSize, err := tarfile.UncompressedLayerSize(reader)
+		if err != nil {
+			return errdefs.NotFound(xerrors.Errorf("failed calculating uncompressed size (%s): %w", layer, err))
+		}
+		allLayerSizes = append(allLayerSizes, layerSize)
+	}
 	config, err := img.ConfigFile()
 	if err != nil {
 		return errdefs.Unavailable(err)
 	}
 
-	rc, err := tarfile.Open(filePath)
-	defer rc.Close()
-	if err != nil {
-		return errdefs.NotFound(xerrors.Errorf("unable to open the file path (%s): %w", filePath, err))
-	}
-
-	b, err := tarfile.ExtractFileFromTar(rc, "manifest.json")
-	if err != nil {
-		return errdefs.Unavailable(err)
-	}
-
-	var manifests tarball.Manifest
-	if err := json.Unmarshal(b, &manifests); err != nil {
-		return errdefs.Unavailable(err)
-	}
-
-	if len(manifests) != 1 {
-		return errdefs.Unavailable(xerrors.New("tarball must contain only a single image to be used with testdocker"))
-	}
-	var allLayerSizes []int64
-	for _, manifest := range manifests{
-		fmt.Println(manifest.Layers)
-		for _, layerPath := range manifest.Layers{
-			rc, err := tarfile.Open(filePath)
-			if err != nil {
-				return errdefs.NotFound(xerrors.Errorf("unable to open the file path (%s): %w", filePath, err))
-			}
-			layerTarByte, err := tarfile.ExtractFileFromTar(rc, layerPath)
-			if err != nil {
-				return errdefs.Unavailable(err)
-			}
-			r := bytes.NewReader(layerTarByte)
-			layerSize,err  := tarfile.UncompressedLayerSize(r)
-			if err != nil {
-				return errdefs.Unavailable(err)
-			}
-			allLayerSizes = append(allLayerSizes, layerSize)
-		}
-	}
 	var inspectHistory []itype.HistoryResponseItem
 	var layerSize int64
-	layerIndex :=0
-	for _, configHistory := range config.History{
-		if configHistory.EmptyLayer{
+	layerIndex := 0
+	for _, configHistory := range config.History {
+		if configHistory.EmptyLayer {
 			layerSize = 0
-		}else{
+		} else {
 			layerSize = allLayerSizes[layerIndex]
-			layerIndex ++
+			layerIndex++
 		}
-		inspectHistory = append(inspectHistory,itype.HistoryResponseItem{
+		inspectHistory = append(inspectHistory, itype.HistoryResponseItem{
 			Comment:   configHistory.Comment,
 			Created:   configHistory.Created.Unix(),
 			CreatedBy: configHistory.CreatedBy,
-			Size: layerSize,
+			Size:      layerSize,
 		})
 	}
 
