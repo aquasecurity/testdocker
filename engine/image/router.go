@@ -250,6 +250,10 @@ func (s *imageRouter) getImageHistory(ctx context.Context, w http.ResponseWriter
 		if err != nil {
 			return errdefs.Unavailable(err)
 		}
+		/* TODO The uncompressed layer size that we calculate is not correct.
+		We have to identify how docker calculates the uncompressed layer sizes
+		Example: python:alpine3.11
+		*/
 		layerSize, err := tarfile.UncompressedLayerSize(reader)
 		if err != nil {
 			return errdefs.NotFound(xerrors.Errorf("failed calculating uncompressed size (%s): %w", layer, err))
