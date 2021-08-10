@@ -8,17 +8,19 @@ import (
 
 	"github.com/docker/docker/errdefs"
 
+	"github.com/aquasecurity/testdocker/tarfile"
 	"github.com/docker/docker/api/server/httputils"
 	"github.com/docker/docker/api/server/router"
 	"github.com/docker/docker/api/types"
 	"github.com/docker/docker/api/types/container"
+	itype "github.com/docker/docker/api/types/image"
 	"github.com/docker/docker/pkg/ioutils"
 	"github.com/docker/go-connections/nat"
 	"github.com/google/go-containerregistry/pkg/v1/tarball"
 	"golang.org/x/xerrors"
-
-	"github.com/aquasecurity/testdocker/tarfile"
 )
+
+const DATE_FORMAT = "2006-01-02 15:04:05.000000000 -0700 MST"
 
 // imageRouter is a router to talk with the image controller
 type imageRouter struct {
@@ -47,6 +49,7 @@ func (s *imageRouter) initRoutes() {
 		router.NewGetRoute("/images/{name:.*}/json", s.getImagesByName),
 		router.NewGetRoute("/images/{name:.*}/get", s.getImagesGet),
 		router.NewGetRoute("/images/get", s.getImagesGet),
+		router.NewGetRoute("/images/{name:.*}/history", s.getImageHistory),
 	}
 }
 
@@ -144,14 +147,13 @@ func (s *imageRouter) getImagesByName(ctx context.Context, w http.ResponseWriter
 		StopTimeout:     nil, // not supported
 		Shell:           config.Config.Shell,
 	}
-
 	inspect := types.ImageInspect{
 		ID:              manifest.Config.Digest.String(),
 		RepoTags:        manifests[0].RepoTags,
 		RepoDigests:     nil, // not supported
 		Parent:          "",  // not supported
 		Comment:         "",  // not supported
-		Created:         config.Created.String(),
+		Created:         config.Created.Time.Format(DATE_FORMAT),
 		Container:       config.Container,
 		ContainerConfig: containerConfig,
 		DockerVersion:   config.DockerVersion,
@@ -218,6 +220,71 @@ func (s *imageRouter) getImagesGet(ctx context.Context, w http.ResponseWriter, r
 
 	if _, err = io.Copy(w, f); err != nil {
 		return errdefs.Unavailable(err)
+	}
+
+	return nil
+}
+
+func (s *imageRouter) getImageHistory(ctx context.Context, w http.ResponseWriter, r *http.Request, vars map[string]string) error {
+	imageName := vars["name"]
+	filePath, ok := s.images[imageName]
+	if !ok {
+		return errdefs.NotFound(xerrors.Errorf("unknown image: %s", imageName))
+	}
+
+	opener := func() (io.ReadCloser, error) {
+		return tarfile.Open(filePath)
+	}
+
+	img, err := tarball.Image(opener, nil)
+	if err != nil {
+		return errdefs.NotFound(xerrors.Errorf("unable to open the file path (%s): %w", filePath, err))
+	}
+	layers, err := img.Layers()
+	if err != nil {
+		return errdefs.Unavailable(err)
+	}
+	var allLayerSizes []int64
+	for _, layer := range layers {
+		reader, err := layer.Uncompressed()
+		if err != nil {
+			return errdefs.Unavailable(err)
+		}
+		/* TODO The uncompressed layer size that we calculate is not correct.
+		We have to identify how docker calculates the uncompressed layer sizes
+		Example: python:alpine3.11
+		*/
+		layerSize, err := tarfile.UncompressedLayerSize(reader)
+		if err != nil {
+			return errdefs.NotFound(xerrors.Errorf("failed calculating uncompressed size (%s): %w", layer, err))
+		}
+		allLayerSizes = append(allLayerSizes, layerSize)
+	}
+	config, err := img.ConfigFile()
+	if err != nil {
+		return errdefs.Unavailable(err)
+	}
+
+	var inspectHistory []itype.HistoryResponseItem
+	var layerSize int64
+	layerIndex := 0
+	for _, configHistory := range config.History {
+		if configHistory.EmptyLayer {
+			layerSize = 0
+		} else {
+			layerSize = allLayerSizes[layerIndex]
+			layerIndex++
+		}
+		inspectHistory = append(inspectHistory, itype.HistoryResponseItem{
+			Comment:   configHistory.Comment,
+			Created:   configHistory.Created.Unix(),
+			CreatedBy: configHistory.CreatedBy,
+			Size:      layerSize,
+		})
+	}
+
+	if err = json.NewEncoder(w).Encode(inspectHistory); err != nil {
+		return errdefs.Unavailable(xerrors.Errorf("unable to encode JSON: %w", err))
 	}
 
 	return nil

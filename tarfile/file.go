@@ -50,3 +50,19 @@ func ExtractFileFromTar(r io.Reader, filePath string) ([]byte, error) {
 	}
 	return nil, fmt.Errorf("file %s not found in tar", filePath)
 }
+
+func UncompressedLayerSize(r io.Reader) (int64, error) {
+	var unCompSize int64
+	tf := tar.NewReader(r)
+	for {
+		hdr, err := tf.Next()
+		if err == io.EOF {
+			break
+		}
+		if err != nil {
+			return 0, err
+		}
+		unCompSize = unCompSize + hdr.Size
+	}
+	return unCompSize, nil
+}
