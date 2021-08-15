@@ -55,7 +55,7 @@ func TestNewDockerRegistry_pingHandler(t *testing.T) {
 			urlPath:            "/v2/",
 			token:              "badinvalidtoken",
 			expectedStatusCode: http.StatusUnauthorized,
-			expectedAuthHeader: `Bearer realm=http://127.0.0.1:[0-9]*/token`,
+			expectedAuthHeader: `Bearer realm="http://127.0.0.1:[0-9]*/token"`,
 			DockerRegistryOption: Option{
 				Auth: auth.Auth{
 					User:     "testuser",
@@ -195,7 +195,7 @@ func TestNewDockerRegistry_blobHandler(t *testing.T) {
 					"v2/alpine:ref123": "doesnt/exist/image/path",
 				},
 			},
-			expectedStatusCode: http.StatusServiceUnavailable,
+			expectedStatusCode: http.StatusNotFound,
 		},
 		{
 			name:    "sad path, image entry and layers entry exists but corrupt image file",
@@ -205,7 +205,7 @@ func TestNewDockerRegistry_blobHandler(t *testing.T) {
 					"v2/alpine:ref123": "testdata/corrupt.tar",
 				},
 			},
-			expectedStatusCode: http.StatusServiceUnavailable,
+			expectedStatusCode: http.StatusNotFound,
 		},
 	}
 
