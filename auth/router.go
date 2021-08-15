@@ -9,11 +9,10 @@ import (
 	"strings"
 	"time"
 
-	"github.com/docker/docker/errdefs"
-	"golang.org/x/xerrors"
-
-	jwt "github.com/dgrijalva/jwt-go"
 	"github.com/docker/docker/api/server/router"
+	"github.com/docker/docker/errdefs"
+	"github.com/golang-jwt/jwt/v4"
+	"golang.org/x/xerrors"
 )
 
 const (
