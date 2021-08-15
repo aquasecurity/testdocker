@@ -143,7 +143,7 @@ func (a authRouter) Middleware(next http.Handler) http.Handler {
 			next.ServeHTTP(w, r)
 		} else {
 			// Write an error and stop the handler chain
-			w.Header().Set("Www-Authenticate", fmt.Sprintf("Bearer realm=http://%s/token", r.Host))
+			w.Header().Set("Www-Authenticate", fmt.Sprintf(`Bearer realm="http://%s/token"`, r.Host))
 			http.Error(w, "UNAUTHORIZED", http.StatusUnauthorized)
 		}
 	})
