@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"io"
 	"net/http"
+	"time"
 
 	"github.com/docker/docker/errdefs"
 
@@ -19,8 +20,6 @@ import (
 	"github.com/google/go-containerregistry/pkg/v1/tarball"
 	"golang.org/x/xerrors"
 )
-
-const DATE_FORMAT = "2006-01-02 15:04:05.000000000 -0700 MST"
 
 // imageRouter is a router to talk with the image controller
 type imageRouter struct {
@@ -153,7 +152,7 @@ func (s *imageRouter) getImagesByName(ctx context.Context, w http.ResponseWriter
 		RepoDigests:     nil, // not supported
 		Parent:          "",  // not supported
 		Comment:         "",  // not supported
-		Created:         config.Created.Time.Format(DATE_FORMAT),
+		Created:         config.Created.Time.Format(time.RFC3339Nano),
 		Container:       config.Container,
 		ContainerConfig: containerConfig,
 		DockerVersion:   config.DockerVersion,
