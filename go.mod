@@ -3,7 +3,7 @@ module github.com/aquasecurity/testdocker
 go 1.14
 
 require (
-	github.com/docker/docker v24.0.7+incompatible
+	github.com/docker/docker v24.0.9+incompatible
 	github.com/docker/go-connections v0.4.0
 	github.com/golang-jwt/jwt/v4 v4.0.0
 	github.com/google/go-containerregistry v0.6.0
