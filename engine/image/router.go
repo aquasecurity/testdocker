@@ -168,7 +168,7 @@ func (s *imageRouter) getImagesByName(ctx context.Context, w http.ResponseWriter
 			Type:   config.RootFS.Type,
 			Layers: diffIDs,
 		},
-		Metadata: types.ImageMetadata{},
+		Metadata: itype.Metadata{},
 	}
 
 	if err = json.NewEncoder(w).Encode(inspect); err != nil {
