@@ -53,7 +53,7 @@ func (s *imageRouter) initRoutes() {
 }
 
 // ref. https://github.com/moby/moby/blob/852542b3976754f62232f1fafca7fd35deeb1da3/api/server/router/image/image.go#L34
-func (s *imageRouter) getImagesByName(ctx context.Context, w http.ResponseWriter, r *http.Request, vars map[string]string) error {
+func (s *imageRouter) getImagesByName(_ context.Context, w http.ResponseWriter, _ *http.Request, vars map[string]string) error {
 	imageName := vars["name"]
 	filePath, ok := s.images[imageName]
 	if !ok {
@@ -147,23 +147,21 @@ func (s *imageRouter) getImagesByName(ctx context.Context, w http.ResponseWriter
 		Shell:           config.Config.Shell,
 	}
 	inspect := types.ImageInspect{
-		ID:              manifest.Config.Digest.String(),
-		RepoTags:        manifests[0].RepoTags,
-		RepoDigests:     nil, // not supported
-		Parent:          "",  // not supported
-		Comment:         "",  // not supported
-		Created:         config.Created.Time.Format(time.RFC3339Nano),
-		Container:       config.Container,
-		ContainerConfig: containerConfig,
-		DockerVersion:   config.DockerVersion,
-		Author:          config.Author,
-		Config:          containerConfig,
-		Architecture:    config.Architecture,
-		Os:              config.OS,
-		OsVersion:       config.OSVersion,
-		Size:            0,                       // not supported
-		VirtualSize:     0,                       // not supported
-		GraphDriver:     types.GraphDriverData{}, // not supported
+		ID:            manifest.Config.Digest.String(),
+		RepoTags:      manifests[0].RepoTags,
+		RepoDigests:   nil, // not supported
+		Parent:        "",  // not supported
+		Comment:       "",  // not supported
+		Created:       config.Created.Time.Format(time.RFC3339Nano),
+		DockerVersion: config.DockerVersion,
+		Author:        config.Author,
+		Config:        containerConfig,
+		Architecture:  config.Architecture,
+		Os:            config.OS,
+		OsVersion:     config.OSVersion,
+		Size:          0,                       // not supported
+		VirtualSize:   0,                       // not supported
+		GraphDriver:   types.GraphDriverData{}, // not supported
 		RootFS: types.RootFS{
 			Type:   config.RootFS.Type,
 			Layers: diffIDs,
