@@ -13,7 +13,7 @@ import (
 )
 
 const (
-	defaultAPIVersion = "1.38"
+	defaultAPIVersion = "1.45"
 )
 
 type Option struct {
