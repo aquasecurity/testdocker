@@ -2,6 +2,7 @@ package registry
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"io"
 	"net/http"
@@ -72,11 +73,19 @@ func (s *registryRouter) manifestHandler(ctx context.Context, w http.ResponseWri
 		return errdefs.NotFound(xerrors.Errorf("unknown image: %s", filePath))
 	}
 
-	b, err := img.RawManifest()
+	m, err := img.Manifest()
 	if err != nil {
 		return errdefs.Unavailable(err)
 	}
 
+	w.Header().Set("Content-Type", string(m.MediaType))
+	w.WriteHeader(http.StatusOK)
+
+	// Use json.Marshal instead of json.NewEncoder to avoid writing a newline
+	b, err := json.Marshal(m)
+	if err != nil {
+		return errdefs.Unavailable(err)
+	}
 	if _, err = w.Write(b); err != nil {
 		return errdefs.Unavailable(err)
 	}
