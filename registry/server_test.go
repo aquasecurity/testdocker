@@ -107,9 +107,8 @@ func TestNewDockerRegistry_manifestHandler(t *testing.T) {
 					"v2/alpine:ref123": "testdata/alpine/alpine.tar",
 				},
 			},
-			expectedStatusCode: http.StatusOK,
-			expectedResponseBody: `{"schemaVersion":2,"mediaType":"application/vnd.docker.distribution.manifest.v2+json","config":{"mediaType":"application/vnd.docker.container.image.v1+json","size":1512,"digest":"sha256:af341ccd2df8b0e2d67cf8dd32e087bfda4e5756ebd1c76bbf3efa0dc246590e"},"layers":[{"mediaType":"application/vnd.docker.image.rootfs.diff.tar.gzip","size":3029607,"digest":"sha256:988beb990993123f9c14951440e468cb469f9f1f4fe512fd9095b48f9c9e7130"}]}
-`,
+			expectedStatusCode:   http.StatusOK,
+			expectedResponseBody: `{"schemaVersion":2,"mediaType":"application/vnd.docker.distribution.manifest.v2+json","config":{"mediaType":"application/vnd.docker.container.image.v1+json","size":1512,"digest":"sha256:af341ccd2df8b0e2d67cf8dd32e087bfda4e5756ebd1c76bbf3efa0dc246590e"},"layers":[{"mediaType":"application/vnd.docker.image.rootfs.diff.tar.gzip","size":3029607,"digest":"sha256:988beb990993123f9c14951440e468cb469f9f1f4fe512fd9095b48f9c9e7130"}]}`,
 		},
 		{
 			name:               "sad path, image not found",

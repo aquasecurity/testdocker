@@ -80,7 +80,13 @@ func (s *registryRouter) manifestHandler(ctx context.Context, w http.ResponseWri
 
 	w.Header().Set("Content-Type", string(m.MediaType))
 	w.WriteHeader(http.StatusOK)
-	if err = json.NewEncoder(w).Encode(m); err != nil {
+
+	// Use json.Marshal instead of json.NewEncoder to avoid writing a newline
+	b, err := json.Marshal(m)
+	if err != nil {
+		return errdefs.Unavailable(err)
+	}
+	if _, err = w.Write(b); err != nil {
 		return errdefs.Unavailable(err)
 	}
 	return nil
