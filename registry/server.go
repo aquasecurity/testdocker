@@ -3,13 +3,15 @@ package registry
 import (
 	"net/http/httptest"
 
+	"github.com/docker/docker/api/server/router"
+	v1 "github.com/google/go-containerregistry/pkg/v1"
+
 	"github.com/aquasecurity/testdocker/auth"
 	"github.com/aquasecurity/testdocker/server"
-	"github.com/docker/docker/api/server/router"
 )
 
 type Option struct {
-	Images map[string]string
+	Images map[string]v1.Image
 	Auth   auth.Auth
 }
 

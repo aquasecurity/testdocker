@@ -7,7 +7,24 @@ import (
 	"io"
 	"os"
 	"strings"
+
+	v1 "github.com/google/go-containerregistry/pkg/v1"
+	"github.com/google/go-containerregistry/pkg/v1/tarball"
+	"golang.org/x/xerrors"
 )
+
+func ImageFromPath(filePath string) (v1.Image, error) {
+	opener := func() (io.ReadCloser, error) {
+		return Open(filePath)
+	}
+
+	img, err := tarball.Image(opener, nil)
+	if err != nil {
+		return nil, xerrors.Errorf("unknown image: %s", filePath)
+	}
+
+	return img, nil
+}
 
 func Open(filePath string) (io.ReadCloser, error) {
 	f, err := os.Open(filePath)
