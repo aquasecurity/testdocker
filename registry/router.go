@@ -132,7 +132,7 @@ func (s *registryRouter) blobHandler(ctx context.Context, w http.ResponseWriter,
 		// return the layer content
 		l, err := img.LayerByDigest(h)
 		if err != nil {
-			return errdefs.Unavailable(err)
+			continue // Not found, try the next image
 		}
 
 		rc, err := l.Compressed()
