@@ -8,24 +8,20 @@ import (
 	"net/http"
 	"strings"
 
-	"github.com/docker/docker/errdefs"
-	"golang.org/x/xerrors"
-
 	"github.com/docker/docker/api/server/router"
-	v1 "github.com/google/go-containerregistry/pkg/v1"
-	"github.com/google/go-containerregistry/pkg/v1/tarball"
-
-	"github.com/aquasecurity/testdocker/tarfile"
+	"github.com/docker/docker/errdefs"
+	"github.com/google/go-containerregistry/pkg/v1"
+	"golang.org/x/xerrors"
 )
 
 // registryRouter is a router to talk with the image controller
 type registryRouter struct {
 	routes []router.Route
-	images map[string]string
+	images map[string]v1.Image
 }
 
 // NewRouter initializes a new image router
-func NewRouter(images map[string]string) router.Router {
+func NewRouter(images map[string]v1.Image) router.Router {
 	r := &registryRouter{
 		images: images,
 	}
@@ -59,18 +55,12 @@ func (s *registryRouter) pingHandler(ctx context.Context, w http.ResponseWriter,
 
 func (s *registryRouter) manifestHandler(ctx context.Context, w http.ResponseWriter, r *http.Request, vars map[string]string) error {
 	imageName := fmt.Sprintf("v%s/%s:%s", vars["version"], vars["name"], vars["reference"])
-	filePath, ok := s.images[imageName]
+	if strings.HasPrefix(vars["reference"], "sha256:") {
+		imageName = fmt.Sprintf("v%s/%s@%s", vars["version"], vars["name"], vars["reference"])
+	}
+	img, ok := s.images[imageName]
 	if !ok {
 		return errdefs.NotFound(xerrors.Errorf("unknown image: %s", imageName))
-	}
-
-	opener := func() (io.ReadCloser, error) {
-		return tarfile.Open(filePath)
-	}
-
-	img, err := tarball.Image(opener, nil)
-	if err != nil {
-		return errdefs.NotFound(xerrors.Errorf("unknown image: %s", filePath))
 	}
 
 	m, err := img.Manifest()
@@ -94,18 +84,9 @@ func (s *registryRouter) manifestHandler(ctx context.Context, w http.ResponseWri
 
 func (s *registryRouter) blobHandler(ctx context.Context, w http.ResponseWriter, r *http.Request, vars map[string]string) error {
 	imageName := fmt.Sprintf("v%s/%s", vars["version"], vars["name"])
-	for image, filePath := range s.images {
-		if !strings.HasPrefix(image, imageName) {
+	for name, img := range s.images {
+		if !strings.HasPrefix(name, imageName) {
 			continue
-		}
-
-		opener := func() (io.ReadCloser, error) {
-			return tarfile.Open(filePath)
-		}
-
-		img, err := tarball.Image(opener, nil)
-		if err != nil {
-			return errdefs.NotFound(xerrors.Errorf("unknown image: %s", filePath))
 		}
 
 		h, err := v1.NewHash(vars["digest"])

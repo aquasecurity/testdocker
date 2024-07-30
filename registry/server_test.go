@@ -2,13 +2,17 @@ package registry
 
 import (
 	"encoding/json"
-	"io/ioutil"
+	"io"
 	"net/http"
+	"os"
 	"regexp"
 	"testing"
 	"time"
 
+	v1 "github.com/google/go-containerregistry/pkg/v1"
+
 	"github.com/aquasecurity/testdocker/auth"
+	"github.com/aquasecurity/testdocker/tarfile"
 
 	"github.com/stretchr/testify/require"
 
@@ -103,8 +107,8 @@ func TestNewDockerRegistry_manifestHandler(t *testing.T) {
 			name:    "happy path, alpine",
 			urlPath: "/v2/alpine/manifests/ref123",
 			option: Option{
-				Images: map[string]string{
-					"v2/alpine:ref123": "testdata/alpine/alpine.tar",
+				Images: map[string]v1.Image{
+					"v2/alpine:ref123": mustImageFromPath(t, "testdata/alpine/alpine.tar"),
 				},
 			},
 			expectedStatusCode:   http.StatusOK,
@@ -113,26 +117,6 @@ func TestNewDockerRegistry_manifestHandler(t *testing.T) {
 		{
 			name:               "sad path, image not found",
 			urlPath:            "/v2/bogusimage/manifests/ref123",
-			expectedStatusCode: http.StatusNotFound,
-		},
-		{
-			name:    "sad path, image exists but tar not found",
-			urlPath: "/v2/notarfile/manifests/ref123",
-			option: Option{
-				Images: map[string]string{
-					"v2/notarfile:ref123": "doesntexist.tar",
-				},
-			},
-			expectedStatusCode: http.StatusNotFound,
-		},
-		{
-			name:    "sad path, image exists but tar is corrupt",
-			urlPath: "/v2/corrupt/manifests/ref123",
-			option: Option{
-				Images: map[string]string{
-					"v2/corrupt:ref123": "testdata/corrupt.tar",
-				},
-			},
 			expectedStatusCode: http.StatusNotFound,
 		},
 	}
@@ -153,7 +137,7 @@ func TestNewDockerRegistry_manifestHandler(t *testing.T) {
 			if resp.StatusCode != http.StatusOK {
 				return
 			}
-			respBody, _ := ioutil.ReadAll(resp.Body)
+			respBody, _ := io.ReadAll(resp.Body)
 			assert.Equal(t, tc.expectedResponseBody, string(respBody), tc.name)
 		})
 	}
@@ -173,8 +157,8 @@ func TestNewDockerRegistry_blobHandler(t *testing.T) {
 			name:    "happy path, blob returns binary data",
 			urlPath: "/v2/alpine/blobs/sha256:988beb990993123f9c14951440e468cb469f9f1f4fe512fd9095b48f9c9e7130",
 			option: Option{
-				Images: map[string]string{
-					"v2/alpine:ref123": "testdata/alpine/alpine.tar",
+				Images: map[string]v1.Image{
+					"v2/alpine:ref123": mustImageFromPath(t, "testdata/alpine/alpine.tar"),
 				},
 			},
 			expectedStatusCode:   http.StatusOK,
@@ -185,26 +169,6 @@ func TestNewDockerRegistry_blobHandler(t *testing.T) {
 		{
 			name:               "sad path, requested blob does not exist",
 			urlPath:            "/v2/alpine/blobs/invalidreference",
-			expectedStatusCode: http.StatusNotFound,
-		},
-		{
-			name:    "sad path, image entry and layers entry exists but no image file",
-			urlPath: "/v2/alpine/blobs/71dba1fabbde4baabcdebcde4895d3f3887e388b09cef162f8159cf7daffa1b8",
-			option: Option{
-				Images: map[string]string{
-					"v2/alpine:ref123": "doesnt/exist/image/path",
-				},
-			},
-			expectedStatusCode: http.StatusNotFound,
-		},
-		{
-			name:    "sad path, image entry and layers entry exists but corrupt image file",
-			urlPath: "/v2/alpine/blobs/71dba1fabbde4baabcdebcde4895d3f3887e388b09cef162f8159cf7daffa1b8",
-			option: Option{
-				Images: map[string]string{
-					"v2/alpine:ref123": "testdata/corrupt.tar",
-				},
-			},
 			expectedStatusCode: http.StatusNotFound,
 		},
 	}
@@ -221,10 +185,10 @@ func TestNewDockerRegistry_blobHandler(t *testing.T) {
 				return
 			}
 
-			expectedContent, err := ioutil.ReadFile(tc.expectedResponseFile)
+			expectedContent, err := os.ReadFile(tc.expectedResponseFile)
 			require.NoError(t, err)
 
-			actualResp, _ := ioutil.ReadAll(resp.Body)
+			actualResp, _ := io.ReadAll(resp.Body)
 			assert.Equal(t, expectedContent, actualResp, tc.name)
 
 			assert.Equal(t, tc.expectedContentType, resp.Header.Get("Content-Type"), tc.name)
@@ -317,7 +281,7 @@ func TestNewDockerRegistry_tokenHandler(t *testing.T) {
 			assert.NoError(t, err, tc.name)
 			assert.Equal(t, tc.expectedStatusCode, resp.StatusCode, tc.name)
 
-			body, err := ioutil.ReadAll(resp.Body)
+			body, err := io.ReadAll(resp.Body)
 			assert.NoError(t, err, tc.name)
 
 			var got auth.TokenResponse
@@ -337,4 +301,10 @@ func TestNewDockerRegistry_tokenHandler(t *testing.T) {
 
 		})
 	}
+}
+
+func mustImageFromPath(t *testing.T, filePath string) v1.Image {
+	img, err := tarfile.ImageFromPath(filePath)
+	require.NoError(t, err)
+	return img
 }
