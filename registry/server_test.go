@@ -1,6 +1,7 @@
 package registry
 
 import (
+	"bytes"
 	"encoding/json"
 	"io"
 	"net/http"
@@ -101,6 +102,7 @@ func TestNewDockerRegistry_manifestHandler(t *testing.T) {
 		option               Option
 		expectedStatusCode   int
 		expectedResponseBody string
+		expectedDigest       string
 		expectedError        error
 	}{
 		{
@@ -113,6 +115,7 @@ func TestNewDockerRegistry_manifestHandler(t *testing.T) {
 			},
 			expectedStatusCode:   http.StatusOK,
 			expectedResponseBody: `{"schemaVersion":2,"mediaType":"application/vnd.docker.distribution.manifest.v2+json","config":{"mediaType":"application/vnd.docker.container.image.v1+json","size":1512,"digest":"sha256:af341ccd2df8b0e2d67cf8dd32e087bfda4e5756ebd1c76bbf3efa0dc246590e"},"layers":[{"mediaType":"application/vnd.docker.image.rootfs.diff.tar.gzip","size":3029607,"digest":"sha256:988beb990993123f9c14951440e468cb469f9f1f4fe512fd9095b48f9c9e7130"}]}`,
+			expectedDigest:       "sha256:e10ea963554297215478627d985466ada334ed15c56d3d6bb808ceab98374d91",
 		},
 		{
 			name:               "sad path, image not found",
@@ -137,8 +140,12 @@ func TestNewDockerRegistry_manifestHandler(t *testing.T) {
 			if resp.StatusCode != http.StatusOK {
 				return
 			}
+
 			respBody, _ := io.ReadAll(resp.Body)
 			assert.Equal(t, tc.expectedResponseBody, string(respBody), tc.name)
+
+			digest, _, _ := v1.SHA256(bytes.NewReader(respBody))
+			assert.Equal(t, tc.expectedDigest, digest.String(), tc.name)
 		})
 	}
 }

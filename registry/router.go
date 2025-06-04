@@ -2,7 +2,6 @@ package registry
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 	"io"
 	"net/http"
@@ -10,7 +9,7 @@ import (
 
 	"github.com/docker/docker/api/server/router"
 	"github.com/docker/docker/errdefs"
-	"github.com/google/go-containerregistry/pkg/v1"
+	v1 "github.com/google/go-containerregistry/pkg/v1"
 	"golang.org/x/xerrors"
 )
 
@@ -63,16 +62,15 @@ func (s *registryRouter) manifestHandler(ctx context.Context, w http.ResponseWri
 		return errdefs.NotFound(xerrors.Errorf("unknown image: %s", imageName))
 	}
 
-	m, err := img.Manifest()
+	media, err := img.MediaType()
 	if err != nil {
 		return errdefs.Unavailable(err)
 	}
 
-	w.Header().Set("Content-Type", string(m.MediaType))
+	w.Header().Set("Content-Type", string(media))
 	w.WriteHeader(http.StatusOK)
 
-	// Use json.Marshal instead of json.NewEncoder to avoid writing a newline
-	b, err := json.Marshal(m)
+	b, err := img.RawManifest()
 	if err != nil {
 		return errdefs.Unavailable(err)
 	}
