@@ -16,8 +16,9 @@ import (
 	"github.com/docker/docker/api/types/container"
 	itype "github.com/docker/docker/api/types/image"
 	"github.com/docker/docker/pkg/ioutils"
-	"github.com/docker/go-connections/nat"
 	"github.com/google/go-containerregistry/pkg/v1/tarball"
+	dockerspec "github.com/moby/docker-image-spec/specs-go/v1"
+	ocispec "github.com/opencontainers/image-spec/specs-go/v1"
 	"golang.org/x/xerrors"
 )
 
@@ -98,9 +99,9 @@ func (s *imageRouter) getImagesByName(_ context.Context, w http.ResponseWriter, 
 		return errdefs.Unavailable(err)
 	}
 
-	exposedPorts := nat.PortSet{}
+	exposedPorts := map[string]struct{}{}
 	for port := range config.Config.ExposedPorts {
-		exposedPorts[nat.Port(port)] = struct{}{}
+		exposedPorts[port] = struct{}{}
 	}
 
 	var diffIDs []string
@@ -108,9 +109,14 @@ func (s *imageRouter) getImagesByName(_ context.Context, w http.ResponseWriter, 
 		diffIDs = append(diffIDs, d.String())
 	}
 
-	var healthCheck *container.HealthConfig
+	volumes := map[string]struct{}{}
+	for vol := range config.Config.Volumes {
+		volumes[vol] = struct{}{}
+	}
+
+	var healthcheck *dockerspec.HealthcheckConfig
 	if config.Config.Healthcheck != nil {
-		healthCheck = &container.HealthConfig{
+		healthcheck = &dockerspec.HealthcheckConfig{
 			Test:        config.Config.Healthcheck.Test,
 			Interval:    config.Config.Healthcheck.Interval,
 			Timeout:     config.Config.Healthcheck.Timeout,
@@ -119,49 +125,52 @@ func (s *imageRouter) getImagesByName(_ context.Context, w http.ResponseWriter, 
 		}
 	}
 
+	// ContainerConfig is deprecated but kept for backward compatibility
 	containerConfig := &container.Config{
-		Hostname:        config.Config.Hostname,
-		Domainname:      config.Config.Domainname,
-		User:            config.Config.User,
-		AttachStdin:     config.Config.AttachStdin,
-		AttachStdout:    config.Config.AttachStdout,
-		AttachStderr:    config.Config.AttachStderr,
-		ExposedPorts:    exposedPorts,
-		Tty:             config.Config.Tty,
-		OpenStdin:       config.Config.OpenStdin,
-		StdinOnce:       config.Config.StdinOnce,
-		Env:             config.Config.Env,
-		Cmd:             config.Config.Cmd,
-		Healthcheck:     healthCheck,
-		ArgsEscaped:     config.Config.ArgsEscaped,
-		Image:           config.Config.Image,
-		Volumes:         config.Config.Volumes,
-		WorkingDir:      config.Config.WorkingDir,
-		Entrypoint:      config.Config.Entrypoint,
-		NetworkDisabled: config.Config.NetworkDisabled,
-		MacAddress:      config.Config.MacAddress,
-		OnBuild:         config.Config.OnBuild,
-		Labels:          config.Config.Labels,
-		StopSignal:      config.Config.StopSignal,
-		StopTimeout:     nil, // not supported
-		Shell:           config.Config.Shell,
+		User:       config.Config.User,
+		Env:        config.Config.Env,
+		Cmd:        config.Config.Cmd,
+		WorkingDir: config.Config.WorkingDir,
+		Entrypoint: config.Config.Entrypoint,
+		Labels:     config.Config.Labels,
+	}
+
+	imageConfig := &dockerspec.DockerOCIImageConfig{
+		ImageConfig: ocispec.ImageConfig{
+			User:         config.Config.User,
+			ExposedPorts: exposedPorts,
+			Env:          config.Config.Env,
+			Entrypoint:   config.Config.Entrypoint,
+			Cmd:          config.Config.Cmd,
+			Volumes:      volumes,
+			WorkingDir:   config.Config.WorkingDir,
+			Labels:       config.Config.Labels,
+			StopSignal:   config.Config.StopSignal,
+			ArgsEscaped:  config.Config.ArgsEscaped,
+		},
+		DockerOCIImageConfigExt: dockerspec.DockerOCIImageConfigExt{
+			Healthcheck: healthcheck,
+			OnBuild:     config.Config.OnBuild,
+			Shell:       config.Config.Shell,
+		},
 	}
 	inspect := types.ImageInspect{
-		ID:            manifest.Config.Digest.String(),
-		RepoTags:      manifests[0].RepoTags,
-		RepoDigests:   nil, // not supported
-		Parent:        "",  // not supported
-		Comment:       "",  // not supported
-		Created:       config.Created.Time.Format(time.RFC3339Nano),
-		DockerVersion: config.DockerVersion,
-		Author:        config.Author,
-		Config:        containerConfig,
-		Architecture:  config.Architecture,
-		Os:            config.OS,
-		OsVersion:     config.OSVersion,
-		Size:          0,                       // not supported
-		VirtualSize:   0,                       // not supported
-		GraphDriver:   types.GraphDriverData{}, // not supported
+		ID:              manifest.Config.Digest.String(),
+		RepoTags:        manifests[0].RepoTags,
+		RepoDigests:     nil, // not supported
+		Parent:          "",  // not supported
+		Comment:         "",  // not supported
+		Created:         config.Created.Time.Format(time.RFC3339Nano),
+		ContainerConfig: containerConfig,
+		DockerVersion:   config.DockerVersion,
+		Author:          config.Author,
+		Config:          imageConfig,
+		Architecture:    config.Architecture,
+		Os:              config.OS,
+		OsVersion:       config.OSVersion,
+		Size:            0,                       // not supported
+		VirtualSize:     0,                       // not supported
+		GraphDriver:     types.GraphDriverData{}, // not supported
 		RootFS: types.RootFS{
 			Type:   config.RootFS.Type,
 			Layers: diffIDs,
