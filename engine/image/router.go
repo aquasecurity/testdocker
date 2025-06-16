@@ -13,7 +13,7 @@ import (
 	"github.com/docker/docker/api/server/httputils"
 	"github.com/docker/docker/api/server/router"
 	"github.com/docker/docker/api/types/container"
-	itype "github.com/docker/docker/api/types/image"
+	"github.com/docker/docker/api/types/image"
 	"github.com/docker/docker/api/types/storage"
 	"github.com/docker/docker/pkg/ioutils"
 	"github.com/google/go-containerregistry/pkg/v1/tarball"
@@ -154,7 +154,7 @@ func (s *imageRouter) getImagesByName(_ context.Context, w http.ResponseWriter, 
 			Shell:       config.Config.Shell,
 		},
 	}
-	inspect := itype.InspectResponse{
+	inspect := image.InspectResponse{
 		ID:              manifest.Config.Digest.String(),
 		RepoTags:        manifests[0].RepoTags,
 		RepoDigests:     nil, // not supported
@@ -171,11 +171,11 @@ func (s *imageRouter) getImagesByName(_ context.Context, w http.ResponseWriter, 
 		Size:            0,                       // not supported
 		VirtualSize:     0,                       // not supported
 		GraphDriver:     storage.DriverData{}, // not supported
-		RootFS: itype.RootFS{
+		RootFS: image.RootFS{
 			Type:   config.RootFS.Type,
 			Layers: diffIDs,
 		},
-		Metadata: itype.Metadata{},
+		Metadata: image.Metadata{},
 	}
 
 	if err = json.NewEncoder(w).Encode(inspect); err != nil {
@@ -271,7 +271,7 @@ func (s *imageRouter) getImageHistory(ctx context.Context, w http.ResponseWriter
 		return errdefs.Unavailable(err)
 	}
 
-	var inspectHistory []itype.HistoryResponseItem
+	var inspectHistory []image.HistoryResponseItem
 	var layerSize int64
 	layerIndex := 0
 	for _, configHistory := range config.History {
@@ -281,7 +281,7 @@ func (s *imageRouter) getImageHistory(ctx context.Context, w http.ResponseWriter
 			layerSize = allLayerSizes[layerIndex]
 			layerIndex++
 		}
-		inspectHistory = append(inspectHistory, itype.HistoryResponseItem{
+		inspectHistory = append(inspectHistory, image.HistoryResponseItem{
 			Comment:   configHistory.Comment,
 			Created:   configHistory.Created.Unix(),
 			CreatedBy: configHistory.CreatedBy,
