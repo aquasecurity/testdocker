@@ -12,9 +12,9 @@ import (
 	"github.com/aquasecurity/testdocker/tarfile"
 	"github.com/docker/docker/api/server/httputils"
 	"github.com/docker/docker/api/server/router"
-	"github.com/docker/docker/api/types"
 	"github.com/docker/docker/api/types/container"
 	itype "github.com/docker/docker/api/types/image"
+	"github.com/docker/docker/api/types/storage"
 	"github.com/docker/docker/pkg/ioutils"
 	"github.com/google/go-containerregistry/pkg/v1/tarball"
 	dockerspec "github.com/moby/docker-image-spec/specs-go/v1"
@@ -154,7 +154,7 @@ func (s *imageRouter) getImagesByName(_ context.Context, w http.ResponseWriter, 
 			Shell:       config.Config.Shell,
 		},
 	}
-	inspect := types.ImageInspect{
+	inspect := itype.InspectResponse{
 		ID:              manifest.Config.Digest.String(),
 		RepoTags:        manifests[0].RepoTags,
 		RepoDigests:     nil, // not supported
@@ -170,8 +170,8 @@ func (s *imageRouter) getImagesByName(_ context.Context, w http.ResponseWriter, 
 		OsVersion:       config.OSVersion,
 		Size:            0,                       // not supported
 		VirtualSize:     0,                       // not supported
-		GraphDriver:     types.GraphDriverData{}, // not supported
-		RootFS: types.RootFS{
+		GraphDriver:     storage.DriverData{}, // not supported
+		RootFS: itype.RootFS{
 			Type:   config.RootFS.Type,
 			Layers: diffIDs,
 		},
