@@ -10,7 +10,10 @@ import (
 	"testing"
 	"time"
 
+	"github.com/google/go-containerregistry/pkg/authn"
+	"github.com/google/go-containerregistry/pkg/name"
 	v1 "github.com/google/go-containerregistry/pkg/v1"
+	"github.com/google/go-containerregistry/pkg/v1/remote"
 
 	"github.com/aquasecurity/testdocker/auth"
 	"github.com/aquasecurity/testdocker/tarfile"
@@ -60,7 +63,7 @@ func TestNewDockerRegistry_pingHandler(t *testing.T) {
 			urlPath:            "/v2/",
 			token:              "badinvalidtoken",
 			expectedStatusCode: http.StatusUnauthorized,
-			expectedAuthHeader: `Bearer realm="http://127.0.0.1:[0-9]*/token"`,
+			expectedAuthHeader: `Bearer realm="http://localhost:[0-9]*/token"`,
 			DockerRegistryOption: Option{
 				Auth: auth.Auth{
 					User:     "testuser",
@@ -308,6 +311,40 @@ func TestNewDockerRegistry_tokenHandler(t *testing.T) {
 
 		})
 	}
+}
+
+// TestNewDockerRegistry_remoteClient is a regression test for the Bearer realm
+// validation added in go-containerregistry v0.21.4 (CVE: SSRF via crafted
+// WWW-Authenticate header). The realm must use a hostname (localhost) rather
+// than an IP literal (127.0.0.1), which is rejected as a loopback address.
+func TestNewDockerRegistry_remoteClient(t *testing.T) {
+	img := mustImageFromPath(t, "testdata/alpine/alpine.tar")
+	tr := NewDockerRegistry(Option{
+		Images: map[string]v1.Image{
+			"v2/alpine:3.10": img,
+		},
+		Auth: auth.Auth{
+			User:     "test",
+			Password: "testpass",
+			Secret:   "secret",
+		},
+	})
+	defer tr.Close()
+
+	ref, err := name.ParseReference(tr.Listener.Addr().String()+"/alpine:3.10", name.Insecure)
+	require.NoError(t, err)
+
+	got, err := remote.Image(ref,
+		remote.WithAuth(&authn.Basic{Username: "test", Password: "testpass"}),
+		remote.WithTransport(http.DefaultTransport),
+	)
+	require.NoError(t, err)
+
+	wantDigest, err := img.Digest()
+	require.NoError(t, err)
+	gotDigest, err := got.Digest()
+	require.NoError(t, err)
+	assert.Equal(t, wantDigest, gotDigest)
 }
 
 func mustImageFromPath(t *testing.T, filePath string) v1.Image {
