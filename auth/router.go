@@ -5,6 +5,7 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"fmt"
+	"net"
 	"net/http"
 	"strings"
 	"time"
@@ -142,7 +143,21 @@ func (a authRouter) Middleware(next http.Handler) http.Handler {
 			next.ServeHTTP(w, r)
 		} else {
 			// Write an error and stop the handler chain
-			w.Header().Set("Www-Authenticate", fmt.Sprintf(`Bearer realm="http://%s/token"`, r.Host))
+			host, port, err := net.SplitHostPort(r.Host)
+			if err != nil {
+				http.Error(w, "invalid host", http.StatusInternalServerError)
+				return
+			}
+			// go-containerregistry v0.21.4+ rejects Bearer realm URLs whose host is a
+			// loopback IP literal as part of its SSRF mitigation
+			// (https://github.com/google/go-containerregistry/pull/2243).
+			// httptest.NewServer binds to loopback, so rewrite 127.0.0.1/::1 to
+			// "localhost" — which resolves back to the same listener — to stay compatible.
+			if ip := net.ParseIP(host); ip != nil && ip.IsLoopback() {
+				host = "localhost"
+			}
+			w.Header().Set("Www-Authenticate",
+				fmt.Sprintf(`Bearer realm="http://%s/token"`, net.JoinHostPort(host, port)))
 			http.Error(w, "UNAUTHORIZED", http.StatusUnauthorized)
 		}
 	})
